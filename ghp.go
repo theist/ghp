@@ -10,11 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/go-github/v32/github"
 	"github.com/joho/godotenv"
 	"github.com/mitchellh/go-homedir"
-	"golang.org/x/net/context"
-	"golang.org/x/oauth2"
 )
 
 type deviceOauthResponse struct {
@@ -29,6 +26,63 @@ type oauthAuthCodeResponse struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`
 	Scope       string `json:"scope"`
+}
+
+type ghpState struct {
+	AccessToken        string `json:"access_token"`
+	User               string `json:"user"`
+	DefaultProject     string `json:"default_project"`
+	DefaultProjectType string `json:"default_project_type"`
+}
+
+// global var to hold state
+var state ghpState
+
+// load Loads json state from disk
+func stateLoad() (ghpState, error) {
+	st := ghpState{
+		AccessToken:        "",
+		User:               "",
+		DefaultProject:     "",
+		DefaultProjectType: "",
+	}
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		return st, err
+	}
+
+	file, err := os.Open(filepath.Join(homeDir, userState))
+	if err != nil {
+		return st, err
+	}
+	defer file.Close()
+	bytes, err := ioutil.ReadAll(file)
+	if err != nil {
+		return st, err
+	}
+	err = json.Unmarshal(bytes, &st)
+	if err != nil {
+		return st, err
+	}
+	return st, nil
+}
+
+func (state *ghpState) save() {
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		log.Printf("Error Saving state: %v", err)
+		return
+	}
+	if state == nil {
+		log.Print("Can't save a nil state")
+		return
+	}
+	data, err := json.Marshal(state)
+	err = ioutil.WriteFile(filepath.Join(homeDir, userState), data, 0600)
+	if err != nil {
+		log.Printf("Error Saving state: %v", err)
+		return
+	}
 }
 
 func oauthCreateDeviceRequest() (*deviceOauthResponse, error) {
@@ -92,38 +146,6 @@ func getOauthToken(device *deviceOauthResponse) (*string, error) {
 	return &res, nil
 }
 
-// read stored token from disk file
-func readStoredToken() string {
-	homeDir, err := homedir.Dir()
-	if err != nil {
-		log.Printf("Error getting homedir %v", err)
-		return ""
-	}
-	file, err := os.Open(filepath.Join(homeDir, USER_TOKEN))
-	if err != nil {
-		log.Printf("Error opening file %v: %v", filepath.Join(homeDir, USER_TOKEN), err)
-		return ""
-	}
-	defer file.Close()
-	bytes, err := ioutil.ReadAll(file)
-	filecontent := string(bytes)
-
-	return strings.TrimSpace(filecontent)
-}
-
-// write a token to file
-func writeAuthToken(token string) error {
-	homeDir, err := homedir.Dir()
-	if err != nil {
-		return err
-	}
-	err = ioutil.WriteFile(filepath.Join(homeDir, USER_TOKEN), []byte(token), 0600)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func validToken(token string) bool {
 	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
 	if token == "" {
@@ -156,45 +178,72 @@ func validToken(token string) bool {
 	return true
 }
 
+// TODO: Show default project
+func showDefaultProject() {
+	log.Fatal("Unimplemented")
+}
+
+// TODO: Renew Oauth
+func renewOAuth() {
+	res, err := oauthCreateDeviceRequest()
+	if err != nil {
+		log.Fatal("Error creating device request: ", err)
+	}
+
+	token, err := getOauthToken(res)
+	if err != nil {
+		log.Fatal("Error getting oauth token: ", err)
+	}
+	state.AccessToken = *token
+}
+
+// TODO: Renew Default Project
+func renewConfig() {
+	log.Fatal("Unimplemented")
+}
+
+// TODO: Show help
+func doHelp() {
+	log.Fatal("Unimplemented")
+}
+
 func main() {
 	homeDir, err := homedir.Dir()
 	if err != nil {
 		log.Fatal(err)
 	}
-	godotenv.Load(".env", filepath.Join(homeDir, USER_CONFIG), GLOBAL_CONFIG)
-	authToken := readStoredToken()
-	if !validToken(authToken) { // do oauth authorization
+	godotenv.Load(".env", filepath.Join(homeDir, userConfig), globalConfig)
 
-		res, err := oauthCreateDeviceRequest()
-		if err != nil {
-			log.Fatal("Error creating device request: ", err)
-		}
-
-		token, err := getOauthToken(res)
-		if err != nil {
-			log.Fatal("Error getting oauth token: ", err)
-		}
-		writeAuthToken(*token)
-		authToken = *token
+	state, err = stateLoad()
+	if err != nil {
+		fmt.Printf("Empty state: %v\n", err)
 	}
-	log.Printf("Token: %v", authToken)
-	ctx := context.Background()
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: authToken},
-	)
-	tc := oauth2.NewClient(ctx, ts)
-	client := github.NewClient(tc)
-	user, _, err := client.Users.Get(ctx, "")
-	fmt.Printf("Authenticated as: %v\n", user.GetLogin())
-	orgs, _, err := client.Organizations.List(ctx, "", nil)
-	for _, org := range orgs {
-		fmt.Printf(" - %v\n", org.GetLogin())
-		projects, _, err := client.Organizations.ListProjects(ctx, org.GetLogin(), nil)
-		for _, prj := range projects {
-			fmt.Printf("   - %v\n", prj.GetName())
+
+	if len(os.Args) < 2 {
+		showDefaultProject()
+	}
+
+	command := os.Args[1]
+
+	switch command {
+	case "auth":
+		if validToken(state.AccessToken) {
+			if !askForConfirmation("There's already valid token are you sure") {
+				os.Exit(0)
+			}
 		}
-		if err != nil {
-			log.Fatal("Error")
-		}
+		renewOAuth()
+	case "config":
+		renewConfig()
+	case "help":
+		doHelp()
+	default:
+		fmt.Printf("Unsupported command %v\n\n", command)
+		doHelp()
+	}
+
+	authToken := state.AccessToken
+	if validToken(authToken) {
+		state.save()
 	}
 }
