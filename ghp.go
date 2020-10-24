@@ -34,15 +34,13 @@ type ghpState struct {
 	AccessToken        string `json:"access_token"`
 	User               string `json:"user"`
 	DefaultProject     string `json:"default_project"`
+	DefaultProjectID   int64  `json:"default_project_id"`
 	DefaultProjectType string `json:"default_project_type"`
 	Organization       string `json:"organization"`
 }
 
-// global var to hold state
-var state ghpState
-
 // load Loads json state from disk
-func stateLoad() (ghpState, error) {
+func stateLoad() (*ghpState, error) {
 	st := ghpState{
 		AccessToken:        "",
 		User:               "",
@@ -51,23 +49,23 @@ func stateLoad() (ghpState, error) {
 	}
 	homeDir, err := homedir.Dir()
 	if err != nil {
-		return st, err
+		return &st, err
 	}
 
 	file, err := os.Open(filepath.Join(homeDir, userState))
 	if err != nil {
-		return st, err
+		return &st, err
 	}
 	defer file.Close()
 	bytes, err := ioutil.ReadAll(file)
 	if err != nil {
-		return st, err
+		return &st, err
 	}
 	err = json.Unmarshal(bytes, &st)
 	if err != nil {
-		return st, err
+		return &st, err
 	}
-	return st, nil
+	return &st, nil
 }
 
 func (state *ghpState) save() {
@@ -185,7 +183,7 @@ func showDefaultProject() {
 	log.Fatal("Unimplemented")
 }
 
-func renewOAuth() {
+func getOAuthToken() string {
 	res, err := oauthCreateDeviceRequest()
 	if err != nil {
 		log.Fatal("Error creating device request: ", err)
@@ -195,10 +193,10 @@ func renewOAuth() {
 	if err != nil {
 		log.Fatal("Error getting oauth token: ", err)
 	}
-	state.AccessToken = *token
+	return *token
 }
 
-func renewConfig() error {
+func renewConfig(state *ghpState) error {
 	ctx := context.Background()
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: state.AccessToken},
@@ -235,14 +233,17 @@ func renewConfig() error {
 		return fmt.Errorf("No orgs for user %v", state.Organization)
 	}
 	projectList := []string{}
+	projectIDs := []int64{}
 	for _, prj := range projects {
 		projectList = append(projectList, prj.GetName())
+		projectIDs = append(projectIDs, prj.GetID())
 	}
 	projectIndex, err := choice("Select project", projectList)
 	if err != nil {
 		return err
 	}
 	state.DefaultProject = projectList[projectIndex]
+	state.DefaultProjectID = projectIDs[projectIndex]
 	state.DefaultProjectType = "organization"
 	return nil
 }
@@ -271,16 +272,16 @@ func main() {
 				os.Exit(0)
 			}
 		}
-		renewOAuth()
+		state.AccessToken = getOAuthToken()
 		if validToken(state.AccessToken) {
 			state.save()
-			fmt.Printf("Auth changes will clear options, please run 'ghp config'")
+			fmt.Printf("Auth changes will clear options, please run 'ghp config'\n")
 		}
 	case "config":
 		if !validToken(state.AccessToken) {
 			fmt.Printf("There's no valid oauth token, please run 'ghp auth'")
 		}
-		err = renewConfig()
+		err = renewConfig(state)
 		if err != nil {
 			fmt.Printf("%v", err)
 			os.Exit(0)
