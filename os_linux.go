@@ -4,14 +4,14 @@ package main
 
 import "os/exec"
 
-// GLOBAL_CONFIG path to config
-const GLOBAL_CONFIG = "/etc/ghp.cfg"
+// globalConfig path to config
+const globalConfig = "/etc/ghp.cfg"
 
-// USER_CONFIG path to user config
-const USER_CONFIG = ".ghp.cfg"
+// userConfig path to user config
+const userConfig = ".ghp.cfg"
 
 // USER_TOKEN token store filename
-const USER_TOKEN = ".ghp.token"
+const userState = ".ghp.state"
 
 func openBrowser(url string) error {
 	err := exec.Command("xdg-open", url).Start()
