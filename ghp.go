@@ -156,7 +156,6 @@ func validToken(token string) bool {
 		log.Print("Empty token")
 		return false
 	}
-	log.Printf("trying token: %v", token)
 	if err != nil {
 		log.Println("Error Creating request", err)
 		return false
@@ -187,7 +186,6 @@ func showDefaultProject() {
 	log.Fatal("Unimplemented")
 }
 
-// TODO: Renew Oauth
 func renewOAuth() {
 	res, err := oauthCreateDeviceRequest()
 	if err != nil {
@@ -299,6 +297,7 @@ func main() {
 
 	authToken := state.AccessToken
 	if validToken(authToken) {
+		fmt.Println("Saving state...")
 		state.save()
 	}
 }
