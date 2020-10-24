@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v32/github"
-	"github.com/joho/godotenv"
 	"github.com/mitchellh/go-homedir"
 	"golang.org/x/oauth2"
 )
@@ -254,13 +253,7 @@ func doHelp() {
 }
 
 func main() {
-	homeDir, err := homedir.Dir()
-	if err != nil {
-		log.Fatal(err)
-	}
-	godotenv.Load(".env", filepath.Join(homeDir, userConfig), globalConfig)
-
-	state, err = stateLoad()
+	state, err := stateLoad()
 	if err != nil {
 		fmt.Printf("Empty state: %v\n", err)
 	}
