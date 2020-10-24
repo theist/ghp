@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -10,8 +11,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/google/go-github/v32/github"
 	"github.com/joho/godotenv"
 	"github.com/mitchellh/go-homedir"
+	"golang.org/x/oauth2"
 )
 
 type deviceOauthResponse struct {
@@ -33,6 +36,7 @@ type ghpState struct {
 	User               string `json:"user"`
 	DefaultProject     string `json:"default_project"`
 	DefaultProjectType string `json:"default_project_type"`
+	Organization       string `json:"organization"`
 }
 
 // global var to hold state
@@ -152,7 +156,6 @@ func validToken(token string) bool {
 		log.Print("Empty token")
 		return false
 	}
-	log.Printf("trying token: %v", token)
 	if err != nil {
 		log.Println("Error Creating request", err)
 		return false
@@ -183,7 +186,6 @@ func showDefaultProject() {
 	log.Fatal("Unimplemented")
 }
 
-// TODO: Renew Oauth
 func renewOAuth() {
 	res, err := oauthCreateDeviceRequest()
 	if err != nil {
@@ -197,9 +199,53 @@ func renewOAuth() {
 	state.AccessToken = *token
 }
 
-// TODO: Renew Default Project
-func renewConfig() {
-	log.Fatal("Unimplemented")
+func renewConfig() error {
+	ctx := context.Background()
+	ts := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: state.AccessToken},
+	)
+	tc := oauth2.NewClient(ctx, ts)
+	client := github.NewClient(tc)
+	user, _, err := client.Users.Get(ctx, "")
+	if err != nil {
+		return fmt.Errorf("Error getting user: %v", err)
+	}
+	fmt.Printf("Authenticated as: %v\n", user.GetLogin())
+	state.User = user.GetLogin()
+	orgs, _, err := client.Organizations.List(ctx, "", nil)
+	if err != nil {
+		return fmt.Errorf("Error getting orgs for user %v : %v", state.User, err)
+	}
+	if len(orgs) == 0 {
+		return fmt.Errorf("No orgs for user %v", state.User)
+	}
+	orgnames := []string{}
+	for _, org := range orgs {
+		orgnames = append(orgnames, org.GetLogin())
+	}
+	index, err := choice("Select organization", orgnames)
+	if err != nil {
+		return err
+	}
+	state.Organization = orgnames[index]
+	projects, _, err := client.Organizations.ListProjects(ctx, state.Organization, nil)
+	if err != nil {
+		return fmt.Errorf("Error getting projects for org %v : %v", state.Organization, err)
+	}
+	if len(orgs) == 0 {
+		return fmt.Errorf("No orgs for user %v", state.Organization)
+	}
+	projectList := []string{}
+	for _, prj := range projects {
+		projectList = append(projectList, prj.GetName())
+	}
+	projectIndex, err := choice("Select project", projectList)
+	if err != nil {
+		return err
+	}
+	state.DefaultProject = projectList[projectIndex]
+	state.DefaultProjectType = "organization"
+	return nil
 }
 
 // TODO: Show help
@@ -234,7 +280,14 @@ func main() {
 		}
 		renewOAuth()
 	case "config":
-		renewConfig()
+		if !validToken(state.AccessToken) {
+			fmt.Printf("There's no valid oauth token, please run 'ghp auth'")
+		}
+		err = renewConfig()
+		if err != nil {
+			fmt.Printf("%v", err)
+			os.Exit(0)
+		}
 	case "help":
 		doHelp()
 	default:
@@ -244,6 +297,7 @@ func main() {
 
 	authToken := state.AccessToken
 	if validToken(authToken) {
+		fmt.Println("Saving state...")
 		state.save()
 	}
 }
