@@ -33,6 +33,7 @@ type ghpState struct {
 	User               string `json:"user"`
 	DefaultProject     string `json:"default_project"`
 	DefaultProjectType string `json:"default_project_type"`
+	Organization       string `json:"organization"`
 }
 
 // global var to hold state
