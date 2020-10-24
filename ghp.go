@@ -279,6 +279,10 @@ func main() {
 			}
 		}
 		renewOAuth()
+		if validToken(state.AccessToken) {
+			state.save()
+			fmt.Printf("Auth changes will clear options, please run 'ghp config'")
+		}
 	case "config":
 		if !validToken(state.AccessToken) {
 			fmt.Printf("There's no valid oauth token, please run 'ghp auth'")
@@ -288,16 +292,13 @@ func main() {
 			fmt.Printf("%v", err)
 			os.Exit(0)
 		}
+		if validToken(state.AccessToken) {
+			state.save()
+		}
 	case "help":
 		doHelp()
 	default:
 		fmt.Printf("Unsupported command %v\n\n", command)
 		doHelp()
-	}
-
-	authToken := state.AccessToken
-	if validToken(authToken) {
-		fmt.Println("Saving state...")
-		state.save()
 	}
 }
