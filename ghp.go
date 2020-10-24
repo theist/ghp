@@ -34,6 +34,7 @@ type ghpState struct {
 	AccessToken        string `json:"access_token"`
 	User               string `json:"user"`
 	DefaultProject     string `json:"default_project"`
+	DefaultProjectID   int64  `json:"default_project_id"`
 	DefaultProjectType string `json:"default_project_type"`
 	Organization       string `json:"organization"`
 }
@@ -232,14 +233,17 @@ func renewConfig(state *ghpState) error {
 		return fmt.Errorf("No orgs for user %v", state.Organization)
 	}
 	projectList := []string{}
+	projectIDs := []int64{}
 	for _, prj := range projects {
 		projectList = append(projectList, prj.GetName())
+		projectIDs = append(projectIDs, prj.GetID())
 	}
 	projectIndex, err := choice("Select project", projectList)
 	if err != nil {
 		return err
 	}
 	state.DefaultProject = projectList[projectIndex]
+	state.DefaultProjectID = projectIDs[projectIndex]
 	state.DefaultProjectType = "organization"
 	return nil
 }
