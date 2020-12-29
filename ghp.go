@@ -178,46 +178,6 @@ func validToken(token string) bool {
 	return true
 }
 
-func showProject(state *ghpState, projectID int64) {
-	ctx := context.Background()
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: state.AccessToken},
-	)
-	tc := oauth2.NewClient(ctx, ts)
-	client := github.NewClient(tc)
-
-	cols, _, err := client.Projects.ListProjectColumns(ctx, projectID, nil)
-	if err != nil {
-		log.Fatalf("Error reading project colums %v\n", err)
-	}
-	for _, col := range cols {
-		fmt.Printf("column: %v\n", col.GetName())
-		cards, _, err := client.Projects.ListProjectCards(ctx, col.GetID(), nil)
-		if err != nil {
-			log.Fatalf("Error reading colums %v %v\n", col.GetName(), err)
-		}
-		for _, card := range cards {
-			if !card.GetArchived() {
-				note := card.GetNote()
-				url := card.GetContentURL()
-				if note != "" {
-					fmt.Printf("   note: %v\n", note)
-					continue
-				}
-				if strings.Contains(url, "/issues/") {
-					//fmt.Printf("   issue: %v\n", url)
-					issue := new(github.Issue)
-					req, _ := client.NewRequest("GET", url, nil)
-					client.Do(ctx, req, issue)
-					fmt.Printf("    issue #%v: %v (%v) assigned to @%v \n", issue.GetNumber(), issue.GetTitle(), "tags", issue.GetAssignee().GetLogin())
-					continue
-				}
-				fmt.Printf("   dunno: %v\n", url)
-			}
-		}
-	}
-}
-
 func getOAuthToken() string {
 	res, err := oauthCreateDeviceRequest()
 	if err != nil {
@@ -288,6 +248,17 @@ func doHelp() {
 	log.Fatal("Unimplemented")
 }
 
+func doList(state ghpState) {
+	fmt.Printf("Requesting full project %v, this can take some time\n", state.DefaultProject)
+	p := new(ProjectProxy)
+	err := p.pull(state, state.DefaultProjectID)
+	if err != nil {
+		fmt.Printf("Error loading project %v", err)
+	}
+	// log.Printf("prj %+v", p)
+	p.listProject("foo")
+}
+
 func main() {
 	state, err := stateLoad()
 	if err != nil {
@@ -303,7 +274,7 @@ func main() {
 			fmt.Println("You don't have configured ghp yet, run 'ghp config'")
 			os.Exit(1)
 		}
-		showProject(state, state.DefaultProjectID)
+		doList(*state)
 		os.Exit(0)
 	}
 
@@ -335,6 +306,8 @@ func main() {
 		}
 	case "help":
 		doHelp()
+	case "list":
+		doList(*state)
 	default:
 		fmt.Printf("Unsupported command %v\n\n", command)
 		doHelp()
