@@ -164,7 +164,7 @@ func (p *ProjectProxy) pullColums(projectID int64) error {
 }
 
 // Project Proxy initializer
-func (p *ProjectProxy) pull(state ghpState, projectID int64) error {
+func (p *ProjectProxy) init(state ghpState, projectID int64) error {
 	ctx := context.Background()
 	p.authToken = state.AccessToken
 	p.user = state.User

@@ -251,9 +251,13 @@ func doHelp() {
 func doList(state ghpState) {
 	fmt.Printf("Requesting full project %v, this can take some time\n", state.DefaultProject)
 	p := new(ProjectProxy)
-	err := p.pull(state, state.DefaultProjectID)
+	err := p.init(state, state.DefaultProjectID)
 	if err != nil {
-		fmt.Printf("Error loading project %v", err)
+		fmt.Printf("Error creating client %v", err)
+	}
+	err = p.pullColums(state.DefaultProjectID)
+	if err != nil {
+		fmt.Printf("Error reading project %v", err)
 	}
 	// log.Printf("prj %+v", p)
 	p.listProject("foo")
