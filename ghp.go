@@ -260,7 +260,8 @@ func doList(state ghpState) {
 		fmt.Printf("Error reading project %v", err)
 	}
 	// log.Printf("prj %+v", p)
-	p.listProject("foo")
+	filters := make([]string, 0)
+	p.listProject(filters)
 }
 
 func main() {

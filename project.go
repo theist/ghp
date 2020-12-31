@@ -13,6 +13,7 @@ import (
 type card interface {
 	getURL() string
 	toListString() string
+	match(filters []string) bool
 }
 
 type issue struct {
@@ -51,6 +52,14 @@ func (i issue) toListString() string {
 	return res
 }
 
+func (i issue) match(filters []string) bool {
+	if len(filters) == 0 {
+		return true
+	}
+	// TODO: implement issue filtering
+	return true // temp
+}
+
 type note struct {
 	url       string
 	text      string
@@ -65,6 +74,14 @@ func (n note) toListString() string {
 	return "note: " + n.text
 }
 
+func (n note) match(filters []string) bool {
+	if len(filters) == 0 {
+		return true
+	}
+	// TODO: implement note filtering
+	return true // temp
+}
+
 type column struct {
 	name  string
 	url   string
@@ -72,7 +89,6 @@ type column struct {
 	cards []card
 }
 
-// TODO: fill notes/issues
 func buildCard(p *ProjectProxy, c *github.ProjectCard) (card, error) {
 	url := c.GetURL()
 	noteText := c.GetNote()
@@ -174,15 +190,16 @@ func (p *ProjectProxy) init(state ghpState, projectID int64) error {
 	)
 	tc := oauth2.NewClient(*p.context, ts)
 	p.client = github.NewClient(tc)
-	p.pullColums(projectID)
 	return nil
 }
 
-func (p *ProjectProxy) listProject(filter string) {
+func (p *ProjectProxy) listProject(filter []string) {
 	for _, col := range p.columns {
 		fmt.Println(col.name + ":")
 		for _, card := range col.cards {
-			fmt.Println("   " + card.toListString())
+			if card.match(filter) {
+				fmt.Println("   " + card.toListString())
+			}
 		}
 	}
 }
