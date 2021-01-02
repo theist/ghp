@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/v32/github"
 	"github.com/patrickmn/go-cache"
@@ -17,10 +19,11 @@ type card interface {
 }
 
 type issue struct {
-	url       string
-	createdAt github.Timestamp
-	ghIssue   *github.Issue
-	labels    []*github.Label
+	url        string
+	createdAt  github.Timestamp
+	ghIssue    *github.Issue
+	labels     []*github.Label
+	repository *github.Repository
 }
 
 func (i issue) getURL() string {
@@ -29,10 +32,7 @@ func (i issue) getURL() string {
 
 func (i issue) toListString() string {
 	res := "issue: "
-	// log.Printf("%+v", i.ghIssue.GetURL())
-	// log.Printf("%+v", i.ghIssue.GetRepository())
-
-	res += fmt.Sprintf("%v#%v", i.ghIssue.GetRepository().GetName(), i.ghIssue.GetNumber())
+	res += fmt.Sprintf("%v#%v", i.repository.GetName(), i.ghIssue.GetNumber())
 	if i.ghIssue.GetState() == "closed" {
 		res += "(closed)"
 	}
@@ -105,7 +105,6 @@ func buildCard(p *ProjectProxy, c *github.ProjectCard) (card, error) {
 	}
 	i.url = url
 	i.createdAt = c.GetCreatedAt()
-
 	return i, nil // returns issue
 }
 
@@ -133,12 +132,35 @@ func (c *column) pullCards(p *ProjectProxy) error {
 
 // ProjectProxy Class for interacting github's project
 type ProjectProxy struct {
-	client    *github.Client
-	context   *context.Context
-	authToken string
-	cache     *cache.Cache
-	user      string
-	columns   []column
+	client      *github.Client
+	context     *context.Context
+	authToken   string
+	cache       *cache.Cache
+	cacheHits   int
+	cacheMisses int
+	user        string
+	columns     []column
+}
+
+func (p *ProjectProxy) requestAPI(url string, v interface{}) error {
+	cached, found := p.cache.Get(url)
+	if found {
+		p.cacheHits++
+		reflect.ValueOf(v).Elem().Set(reflect.ValueOf(cached).Elem()) // v = x with interfaces
+		return nil
+	}
+	p.cacheMisses++
+	req, _ := p.client.NewRequest("GET", url, nil)
+	res, err := p.client.Do(*p.context, req, v)
+	if err != nil {
+		return err
+	}
+	if res.StatusCode != 200 {
+		return fmt.Errorf("Error Getting %v: %v", url, res.Status)
+	}
+	p.cache.Add(url, v, cache.DefaultExpiration)
+	// TODO: process API response
+	return nil
 }
 
 func (p *ProjectProxy) getIssueByURL(url string) (*issue, error) {
@@ -150,6 +172,12 @@ func (p *ProjectProxy) getIssueByURL(url string) (*issue, error) {
 	}
 	pIssue := new(issue)
 	pIssue.ghIssue = i
+	repo := new(github.Repository)
+	err = p.requestAPI(i.GetRepositoryURL(), repo)
+	if err != nil {
+		return nil, err
+	}
+	pIssue.repository = repo
 	return pIssue, nil
 }
 
@@ -181,6 +209,7 @@ func (p *ProjectProxy) pullColums(projectID int64) error {
 
 // Project Proxy initializer
 func (p *ProjectProxy) init(state ghpState, projectID int64) error {
+	p.cache = cache.New(10*time.Minute, 15*time.Minute)
 	ctx := context.Background()
 	p.authToken = state.AccessToken
 	p.user = state.User

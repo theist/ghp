@@ -262,6 +262,7 @@ func doList(state ghpState) {
 	// log.Printf("prj %+v", p)
 	filters := make([]string, 0)
 	p.listProject(filters)
+	fmt.Printf("\ncache performance:\nHits: %v\nMiss:%v\n", p.cacheHits, p.cacheMisses)
 }
 
 func main() {
