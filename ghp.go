@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -37,6 +38,33 @@ type ghpState struct {
 	DefaultProjectID   int64  `json:"default_project_id"`
 	DefaultProjectType string `json:"default_project_type"`
 	Organization       string `json:"organization"`
+}
+
+type filterFlags []string
+
+func (f *filterFlags) Set(value string) error {
+	*f = append(*f, value)
+	return nil
+}
+
+func (f *filterFlags) String() string {
+	str := "(" + strings.Join(*f, ") OR (") + ")"
+	str = strings.ReplaceAll(str, ",", " AND ")
+	return str
+}
+
+func (f *filterFlags) toString() string {
+	str := "(" + strings.Join(*f, ") OR (") + ")"
+	str = strings.ReplaceAll(str, ",", " AND ")
+	return str
+}
+
+func (f *filterFlags) toFilters() [][]string {
+	filters := [][]string{}
+	for _, filter := range *f {
+		filters = append(filters, strings.Split(filter, ","))
+	}
+	return filters
 }
 
 // load Loads json state from disk
@@ -248,7 +276,7 @@ func doHelp() {
 	log.Fatal("Unimplemented")
 }
 
-func doList(state ghpState) {
+func doList(state ghpState, f filterFlags) {
 	fmt.Printf("Requesting full project %v, this can take some time\n", state.DefaultProject)
 	p := new(ProjectProxy)
 	err := p.init(state, state.DefaultProjectID)
@@ -260,8 +288,10 @@ func doList(state ghpState) {
 		fmt.Printf("Error reading project %v", err)
 	}
 	// log.Printf("prj %+v", p)
-	filters := make([]string, 0)
-	p.listProject(filters)
+	if len(f) != 0 {
+		fmt.Printf("Appliying filters: %v\n", f.String())
+	}
+	p.listProject(f.toFilters())
 	fmt.Printf("\ncache performance:\nHits: %v\nMiss:%v\n", p.cacheHits, p.cacheMisses)
 }
 
@@ -271,7 +301,12 @@ func main() {
 		fmt.Printf("Empty state: %v\n", err)
 	}
 
-	if len(os.Args) < 2 {
+	// parse flags
+	var filters filterFlags
+	flag.Var(&filters, "filter", "Issue filtering, use a comma separated for AND filter and several -filter paramenters for OR filter")
+	flag.Parse()
+
+	if len(flag.Args()) < 2 {
 		if !validToken(state.AccessToken) {
 			fmt.Println("You don't have configured ghp yet, run 'ghp auth' and 'ghp config'")
 			os.Exit(1)
@@ -280,11 +315,11 @@ func main() {
 			fmt.Println("You don't have configured ghp yet, run 'ghp config'")
 			os.Exit(1)
 		}
-		doList(*state)
+		doList(*state, filters)
 		os.Exit(0)
 	}
 
-	command := os.Args[1]
+	command := flag.Arg(1)
 
 	switch command {
 	case "auth":
@@ -313,7 +348,7 @@ func main() {
 	case "help":
 		doHelp()
 	case "list":
-		doList(*state)
+		doList(*state, filters)
 	default:
 		fmt.Printf("Unsupported command %v\n\n", command)
 		doHelp()

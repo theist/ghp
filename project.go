@@ -15,7 +15,7 @@ import (
 type card interface {
 	getURL() string
 	toListString() string
-	match(filters []string) bool
+	match(filters [][]string) bool
 }
 
 type issue struct {
@@ -52,12 +52,27 @@ func (i issue) toListString() string {
 	return res
 }
 
-func (i issue) match(filters []string) bool {
+func (i issue) match(filters [][]string) bool {
 	if len(filters) == 0 {
 		return true
 	}
-	// TODO: implement issue filtering
-	return true // temp
+	issueString := "issue " + i.toListString()
+	if i.ghIssue.Assignee == nil {
+		issueString += " unassigned"
+	}
+	for _, orFilter := range filters {
+		subRes := true
+		for _, andFilter := range orFilter {
+			if !strings.Contains(issueString, andFilter) { // if AND subfilter fails one break and set false
+				subRes = false
+				break
+			}
+		}
+		if subRes {
+			return true // if only one OR filter is true return inmediately true
+		}
+	}
+	return false
 }
 
 type note struct {
@@ -74,12 +89,24 @@ func (n note) toListString() string {
 	return "note: " + n.text
 }
 
-func (n note) match(filters []string) bool {
+// uses "note " +  note test for matching
+func (n note) match(filters [][]string) bool {
 	if len(filters) == 0 {
 		return true
 	}
-	// TODO: implement note filtering
-	return true // temp
+	for _, orFilter := range filters {
+		subRes := true
+		for _, andFilter := range orFilter {
+			if !strings.Contains("note "+n.text, andFilter) { // if AND subfilter fails one break and set false
+				subRes = false
+				break
+			}
+		}
+		if subRes {
+			return true // if only one OR filter is true return inmediately true
+		}
+	}
+	return false
 }
 
 type column struct {
@@ -222,7 +249,7 @@ func (p *ProjectProxy) init(state ghpState, projectID int64) error {
 	return nil
 }
 
-func (p *ProjectProxy) listProject(filter []string) {
+func (p *ProjectProxy) listProject(filter [][]string) {
 	for _, col := range p.columns {
 		fmt.Println(col.name + ":")
 		for _, card := range col.cards {
