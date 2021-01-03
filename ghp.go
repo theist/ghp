@@ -53,12 +53,6 @@ func (f *filterFlags) String() string {
 	return str
 }
 
-func (f *filterFlags) toString() string {
-	str := "(" + strings.Join(*f, ") OR (") + ")"
-	str = strings.ReplaceAll(str, ",", " AND ")
-	return str
-}
-
 func (f *filterFlags) toFilters() [][]string {
 	filters := [][]string{}
 	for _, filter := range *f {
