@@ -285,7 +285,8 @@ func doList(state ghpState, f filterFlags) {
 	if len(f) != 0 {
 		fmt.Printf("Appliying filters: %v\n", f.String())
 	}
-	p.listProject(f.toFilters())
+	//p.listProject(f.toFilters())
+	fancyList(p, f.toFilters())
 	fmt.Printf("\ncache performance:\nHits: %v\nMiss:%v\n", p.cacheHits, p.cacheMisses)
 }
 

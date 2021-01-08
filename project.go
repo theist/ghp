@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/go-github/v32/github"
 	"github.com/patrickmn/go-cache"
@@ -73,6 +74,23 @@ func (i issue) match(filters [][]string) bool {
 		}
 	}
 	return false
+}
+
+func (i *issue) labelString() string {
+	res := ""
+	labels := i.ghIssue.Labels
+	if len(labels) != 0 {
+		labelnames := make([]string, 0, len(labels))
+		for _, label := range labels {
+			labelnames = append(labelnames, label.GetName())
+		}
+		res += strings.Join(labelnames, ",")
+	}
+	return res
+}
+
+func (i *issue) lenLabelString() int {
+	return utf8.RuneCountInString(i.labelString())
 }
 
 type note struct {

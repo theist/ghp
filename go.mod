@@ -9,5 +9,6 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	golang.org/x/net v0.0.0-20201016165138-7b1cca2348c0 // indirect
 	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
+	golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f
 	google.golang.org/protobuf v1.25.0 // indirect
 )
