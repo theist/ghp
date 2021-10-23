@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/google/go-github/v32/github"
-	"github.com/patrickmn/go-cache"
 	"golang.org/x/oauth2"
 )
 
@@ -177,24 +175,20 @@ func (c *column) pullCards(p *ProjectProxy) error {
 
 // ProjectProxy Class for interacting github's project
 type ProjectProxy struct {
-	client      *github.Client
-	context     *context.Context
-	authToken   string
-	cache       *cache.Cache
-	cacheHits   int
-	cacheMisses int
-	user        string
-	columns     []column
+	client    *github.Client
+	context   *context.Context
+	authToken string
+	cache     *appCache
+	user      string
+	columns   []column
 }
 
 func (p *ProjectProxy) requestAPI(url string, v interface{}) error {
-	cached, found := p.cache.Get(url)
-	if found {
-		p.cacheHits++
+	cached := p.cache.get(url)
+	if cached != nil {
 		reflect.ValueOf(v).Elem().Set(reflect.ValueOf(cached).Elem()) // v = x with interfaces
 		return nil
 	}
-	p.cacheMisses++
 	req, _ := p.client.NewRequest("GET", url, nil)
 	res, err := p.client.Do(*p.context, req, v)
 	if err != nil {
@@ -203,7 +197,7 @@ func (p *ProjectProxy) requestAPI(url string, v interface{}) error {
 	if res.StatusCode != 200 {
 		return fmt.Errorf("Error Getting %v: %v", url, res.Status)
 	}
-	p.cache.Add(url, v, cache.DefaultExpiration)
+	p.cache.add(url, v)
 	// TODO: process API response
 	return nil
 }
@@ -253,8 +247,8 @@ func (p *ProjectProxy) pullColums(projectID int64) error {
 }
 
 // Project Proxy initializer
-func (p *ProjectProxy) init(state ghpConfig, projectID int64) error {
-	p.cache = cache.New(10*time.Minute, 15*time.Minute)
+func (p *ProjectProxy) init(state ghpConfig, cache *appCache, projectID int64) error {
+	p.cache = cache
 	ctx := context.Background()
 	p.authToken = state.AccessToken
 	p.user = state.User

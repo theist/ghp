@@ -156,10 +156,10 @@ func doHelp() {
 	log.Fatal("Unimplemented")
 }
 
-func doList(state ghpConfig, f filterFlags) {
+func doList(state ghpConfig, cache *appCache, f filterFlags) {
 	fmt.Printf("Requesting full project %v, this can take some time\n", state.DefaultProject)
 	p := new(ProjectProxy)
-	err := p.init(state, state.DefaultProjectID)
+	err := p.init(state, cache, state.DefaultProjectID)
 	if err != nil {
 		fmt.Printf("Error creating client %v", err)
 	}
@@ -173,7 +173,7 @@ func doList(state ghpConfig, f filterFlags) {
 	}
 	//p.listProject(f.toFilters())
 	fancyList(p, f.toFilters())
-	fmt.Printf("\ncache performance:\nHits: %v\nMiss:%v\n", p.cacheHits, p.cacheMisses)
+	fmt.Printf("\ncache performance:\nHits: %v\nMiss:%v\n", cache.cacheHits, cache.cacheMiss)
 }
 
 func main() {
@@ -181,6 +181,7 @@ func main() {
 	if err != nil {
 		fmt.Printf("Empty state: %v\n", err)
 	}
+	cache := initCache()
 
 	// parse flags
 	var filters filterFlags
@@ -196,7 +197,7 @@ func main() {
 			fmt.Println("You don't have configured ghp yet, run 'ghp config'")
 			os.Exit(1)
 		}
-		doList(*state, filters)
+		doList(*state, cache, filters)
 		os.Exit(0)
 	}
 
@@ -236,7 +237,7 @@ func main() {
 	case "help":
 		doHelp()
 	case "list":
-		doList(*state, filters)
+		doList(*state, cache, filters)
 	default:
 		fmt.Printf("Unsupported command %v\n\n", command)
 		doHelp()
