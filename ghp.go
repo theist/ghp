@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -9,12 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
-
-	"github.com/google/go-github/v32/github"
-	"github.com/mitchellh/go-homedir"
-	"golang.org/x/oauth2"
 )
 
 type deviceOauthResponse struct {
@@ -29,15 +23,6 @@ type oauthAuthCodeResponse struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`
 	Scope       string `json:"scope"`
-}
-
-type ghpState struct {
-	AccessToken        string `json:"access_token"`
-	User               string `json:"user"`
-	DefaultProject     string `json:"default_project"`
-	DefaultProjectID   int64  `json:"default_project_id"`
-	DefaultProjectType string `json:"default_project_type"`
-	Organization       string `json:"organization"`
 }
 
 type filterFlags []string
@@ -59,53 +44,6 @@ func (f *filterFlags) toFilters() [][]string {
 		filters = append(filters, strings.Split(filter, ","))
 	}
 	return filters
-}
-
-// load Loads json state from disk
-func stateLoad() (*ghpState, error) {
-	st := ghpState{
-		AccessToken:        "",
-		User:               "",
-		DefaultProject:     "",
-		DefaultProjectType: "",
-	}
-	homeDir, err := homedir.Dir()
-	if err != nil {
-		return &st, err
-	}
-
-	file, err := os.Open(filepath.Join(homeDir, userState))
-	if err != nil {
-		return &st, err
-	}
-	defer file.Close()
-	bytes, err := ioutil.ReadAll(file)
-	if err != nil {
-		return &st, err
-	}
-	err = json.Unmarshal(bytes, &st)
-	if err != nil {
-		return &st, err
-	}
-	return &st, nil
-}
-
-func (state *ghpState) save() {
-	homeDir, err := homedir.Dir()
-	if err != nil {
-		log.Printf("Error Saving state: %v", err)
-		return
-	}
-	if state == nil {
-		log.Print("Can't save a nil state")
-		return
-	}
-	data, err := json.Marshal(state)
-	err = ioutil.WriteFile(filepath.Join(homeDir, userState), data, 0600)
-	if err != nil {
-		log.Printf("Error Saving state: %v", err)
-		return
-	}
 }
 
 func oauthCreateDeviceRequest() (*deviceOauthResponse, error) {
@@ -213,64 +151,12 @@ func getOAuthToken() string {
 	return *token
 }
 
-func renewConfig(state *ghpState) error {
-	ctx := context.Background()
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: state.AccessToken},
-	)
-	tc := oauth2.NewClient(ctx, ts)
-	client := github.NewClient(tc)
-	user, _, err := client.Users.Get(ctx, "")
-	if err != nil {
-		return fmt.Errorf("Error getting user: %v", err)
-	}
-	fmt.Printf("Authenticated as: %v\n", user.GetLogin())
-	state.User = user.GetLogin()
-	orgs, _, err := client.Organizations.List(ctx, "", nil)
-	if err != nil {
-		return fmt.Errorf("Error getting orgs for user %v : %v", state.User, err)
-	}
-	if len(orgs) == 0 {
-		return fmt.Errorf("No orgs for user %v", state.User)
-	}
-	orgnames := []string{}
-	for _, org := range orgs {
-		orgnames = append(orgnames, org.GetLogin())
-	}
-	index, err := choice("Select organization", orgnames)
-	if err != nil {
-		return err
-	}
-	state.Organization = orgnames[index]
-	projects, _, err := client.Organizations.ListProjects(ctx, state.Organization, nil)
-	if err != nil {
-		return fmt.Errorf("Error getting projects for org %v : %v", state.Organization, err)
-	}
-	if len(orgs) == 0 {
-		return fmt.Errorf("No orgs for user %v", state.Organization)
-	}
-	projectList := []string{}
-	projectIDs := []int64{}
-	for _, prj := range projects {
-		projectList = append(projectList, prj.GetName())
-		projectIDs = append(projectIDs, prj.GetID())
-	}
-	projectIndex, err := choice("Select project", projectList)
-	if err != nil {
-		return err
-	}
-	state.DefaultProject = projectList[projectIndex]
-	state.DefaultProjectID = projectIDs[projectIndex]
-	state.DefaultProjectType = "organization"
-	return nil
-}
-
 // TODO: Show help
 func doHelp() {
 	log.Fatal("Unimplemented")
 }
 
-func doList(state ghpState, f filterFlags) {
+func doList(state ghpConfig, f filterFlags) {
 	fmt.Printf("Requesting full project %v, this can take some time\n", state.DefaultProject)
 	p := new(ProjectProxy)
 	err := p.init(state, state.DefaultProjectID)
@@ -325,7 +211,11 @@ func main() {
 		}
 		state.AccessToken = getOAuthToken()
 		if validToken(state.AccessToken) {
-			state.save()
+			err := state.save()
+			if err != nil {
+				fmt.Printf("Error saving config: %v", err)
+				os.Exit(1)
+			}
 			fmt.Printf("Auth changes will clear options, please run 'ghp config'\n")
 		}
 	case "config":
@@ -338,7 +228,10 @@ func main() {
 			os.Exit(0)
 		}
 		if validToken(state.AccessToken) {
-			state.save()
+			err := state.save()
+			if err != nil {
+				fmt.Printf("Error saving state: %v", err)
+			}
 		}
 	case "help":
 		doHelp()

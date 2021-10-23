@@ -253,7 +253,7 @@ func (p *ProjectProxy) pullColums(projectID int64) error {
 }
 
 // Project Proxy initializer
-func (p *ProjectProxy) init(state ghpState, projectID int64) error {
+func (p *ProjectProxy) init(state ghpConfig, projectID int64) error {
 	p.cache = cache.New(10*time.Minute, 15*time.Minute)
 	ctx := context.Background()
 	p.authToken = state.AccessToken
