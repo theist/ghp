@@ -18,10 +18,10 @@ type card interface {
 }
 
 type issue struct {
-	url        string
-	createdAt  github.Timestamp
-	ghIssue    *github.Issue
-	labels     []*github.Label
+	url       string
+	createdAt github.Timestamp
+	ghIssue   *github.Issue
+	//labels     []*github.Label
 	repository *github.Repository
 }
 
@@ -155,17 +155,17 @@ func (c *column) pullCards(p *ProjectProxy) error {
 	// log.Printf("pullig cards for %v", c.id)
 	cards, res, err := p.client.Projects.ListProjectCards(*p.context, c.id, nil)
 	if err != nil {
-		return fmt.Errorf("Error Getting cards for %v: %v", c.id, err)
+		return fmt.Errorf("error Getting cards for %v: %v", c.id, err)
 	}
 	if res.StatusCode != 200 {
-		return fmt.Errorf("Error Getting cards for %v: http: %v", c.id, res.Status)
+		return fmt.Errorf("error Getting cards for %v: http: %v", c.id, res.Status)
 	}
 	for _, card := range cards {
 		if !card.GetArchived() {
 			newCard, err := buildCard(p, card)
 			// log.Printf("new Card: %+v", newCard)
 			if err != nil {
-				return fmt.Errorf("Error Getting card for %v: %v", c.id, err)
+				return fmt.Errorf("error Getting card for %v: %v", c.id, err)
 			}
 			c.cards = append(c.cards, newCard)
 		}
@@ -195,7 +195,7 @@ func (p *ProjectProxy) requestAPI(url string, v interface{}) error {
 		return err
 	}
 	if res.StatusCode != 200 {
-		return fmt.Errorf("Error Getting %v: %v", url, res.Status)
+		return fmt.Errorf("error getting %v: %v", url, res.Status)
 	}
 	p.cache.add(url, v)
 	// TODO: process API response
@@ -224,13 +224,13 @@ func (p *ProjectProxy) pullColums(projectID int64) error {
 	// log.Printf("Pull columns %v", projectID)
 	cols, res, err := p.client.Projects.ListProjectColumns(*p.context, projectID, nil)
 	if err != nil {
-		return fmt.Errorf("Error Getting columns for %v: %v", projectID, err)
+		return fmt.Errorf("error getting columns for %v: %v", projectID, err)
 	}
 	if res.StatusCode != 200 {
-		return fmt.Errorf("Error Getting columns for %v: http: %v", projectID, res.Status)
+		return fmt.Errorf("error getting columns for %v: http: %v", projectID, res.Status)
 	}
 	if len(cols) < 1 {
-		return fmt.Errorf("Error Getting columns for %v: Zero items", projectID)
+		return fmt.Errorf("error getting columns for %v: Zero items", projectID)
 	}
 	for _, c := range cols {
 		col := new(column)

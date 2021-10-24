@@ -19,6 +19,8 @@ func initCache() *appCache {
 	return &newCache
 }
 
+// TODO: unimplemented
+//lint:ignore U1000 uninpremented
 func (*appCache) save() error {
 	// save cache to disk, at predefined path
 	return nil

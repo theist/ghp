@@ -16,19 +16,19 @@ func choice(prompt string, choices []string) (int, error) {
 	reader := bufio.NewReader(os.Stdin)
 	response, err := reader.ReadString('\n')
 	if err != nil {
-		return 0, fmt.Errorf("Error reading choice")
+		return 0, fmt.Errorf("error reading choice")
 	}
 	response = strings.ToLower(strings.TrimSpace(response))
 	if response == "exit" {
-		return 0, fmt.Errorf("Aborted by user")
+		return 0, fmt.Errorf("aborted by user")
 	}
 
 	index, err := strconv.Atoi(response)
 	if err != nil {
-		return 0, fmt.Errorf("Invalid input: %v", err)
+		return 0, fmt.Errorf("invalid input: %v", err)
 	}
 	if index == 0 || index > len(choices) {
-		return 0, fmt.Errorf("Invalid input: %v", index)
+		return 0, fmt.Errorf("invalid input: %v", index)
 	}
 	return index - 1, nil
 }
