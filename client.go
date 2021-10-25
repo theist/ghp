@@ -53,7 +53,12 @@ func oauthCreateDeviceRequest() (*deviceOauthResponse, error) {
 	return &responseJSON, nil
 }
 
-func getOauthToken(device *deviceOauthResponse) (*string, error) {
+// TODO: Split two steps, bring User Interaction outside client class
+func (c *ghpClient) getOauthToken() error {
+	device, err := oauthCreateDeviceRequest()
+	if err != nil {
+		return fmt.Errorf("error creating device request: %v", err)
+	}
 	fmt.Println("A browser window will open")
 	fmt.Println("Please insert this code to authorize this client")
 	fmt.Println(device.UserCode)
@@ -65,40 +70,27 @@ func getOauthToken(device *deviceOauthResponse) (*string, error) {
 
 	req, err := http.NewRequest("POST", "https://github.com/login/oauth/access_token", body)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil
 	}
 	defer resp.Body.Close()
 	responseBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	var responseAuth oauthAuthCodeResponse
 	err = json.Unmarshal(responseBody, &responseAuth)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	res := responseAuth.AccessToken
-	return &res, nil
-}
-
-func getOAuthToken() string {
-	res, err := oauthCreateDeviceRequest()
-	if err != nil {
-		log.Fatal("Error creating device request: ", err)
-	}
-
-	token, err := getOauthToken(res)
-	if err != nil {
-		log.Fatal("Error getting oauth token: ", err)
-	}
-	return *token
+	c.oauthToken = responseAuth.AccessToken
+	return nil
 }
 
 func createClient(authToken string) *ghpClient {
@@ -107,7 +99,6 @@ func createClient(authToken string) *ghpClient {
 	return c
 }
 
-//lint:ignore U1000 uninpremented
 func (c *ghpClient) getToken() string {
 	return c.oauthToken
 }

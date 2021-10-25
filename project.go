@@ -261,6 +261,7 @@ func (p *ProjectProxy) init(state ghpConfig, cache *appCache, projectID int64) e
 	return nil
 }
 
+//lint:ignore U1000 uninpremented
 func (p *ProjectProxy) listProject(filter [][]string) {
 	for _, col := range p.columns {
 		fmt.Println(col.name + ":")

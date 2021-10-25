@@ -94,8 +94,13 @@ func main() {
 				os.Exit(0)
 			}
 		}
-		state.AccessToken = getOAuthToken()
-		valid, err := client.validToken()
+		err := client.getOauthToken()
+		if err != nil {
+			fmt.Printf("Error Performing oauth: %v", err)
+			os.Exit(1)
+		}
+		state.AccessToken = client.getToken()
+		valid, err = client.validToken()
 		if err != nil {
 			fmt.Printf("Error whith token: %v", err)
 			os.Exit(1)
