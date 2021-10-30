@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/google/go-github/v32/github"
+	"golang.org/x/oauth2"
 )
 
 type deviceOauthResponse struct {
@@ -26,6 +30,8 @@ type oauthAuthCodeResponse struct {
 type ghpClient struct {
 	oauthToken string
 	deviceCode string
+	apiClient  *github.Client
+	context    *context.Context
 }
 
 func oauthCreateDeviceRequest() (*deviceOauthResponse, error) {
@@ -94,6 +100,13 @@ func (c *ghpClient) performOauth() error {
 func createClient(authToken string) *ghpClient {
 	c := new(ghpClient)
 	c.oauthToken = authToken
+	ctx := context.Background()
+	c.context = &ctx
+	ts := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: c.oauthToken},
+	)
+	tc := oauth2.NewClient(*c.context, ts)
+	c.apiClient = github.NewClient(tc)
 	return c
 }
 
@@ -126,4 +139,39 @@ func (c *ghpClient) validToken() (bool, error) {
 		return false, fmt.Errorf("client error: %v", resp.StatusCode)
 	}
 	return true, nil
+}
+
+func (c *ghpClient) getAllColumnCards(columnId int64) ([]*github.ProjectCard, error) {
+	cards, res, err := c.apiClient.Projects.ListProjectCards(*c.context, columnId, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error Getting cards for %v: %v", columnId, err)
+	}
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("error Getting cards for %v: http: %v", columnId, res.Status)
+	}
+	return cards, nil
+}
+
+func (c *ghpClient) listColumns(projectID int64) ([]*github.ProjectColumn, error) {
+	cols, res, err := c.apiClient.Projects.ListProjectColumns(*c.context, projectID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error getting columns for %v: %v", projectID, err)
+	}
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("error getting columns for %v: http: %v", projectID, res.Status)
+	}
+
+	return cols, nil
+}
+
+func (c *ghpClient) getAPIObject(url string, v interface{}) error {
+	req, _ := c.apiClient.NewRequest("GET", url, nil)
+	res, err := c.apiClient.Do(*c.context, req, v)
+	if err != nil {
+		return err
+	}
+	if res.StatusCode != 200 {
+		return fmt.Errorf("error getting %v: %v", url, res.Status)
+	}
+	return nil
 }

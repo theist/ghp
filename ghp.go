@@ -50,10 +50,10 @@ func checkAllConfig(config *ghpConfig, client *ghpClient) {
 	}
 }
 
-func doList(state ghpConfig, cache *appCache, f filterFlags) {
+func doList(state ghpConfig, cache *appCache, client *ghpClient, f filterFlags) {
 	fmt.Printf("Requesting full project %v, this can take some time\n", state.DefaultProject)
 	p := new(ProjectProxy)
-	err := p.init(state, cache, state.DefaultProjectID)
+	err := p.init(state, cache, client, state.DefaultProjectID)
 	if err != nil {
 		fmt.Printf("Error creating client %v", err)
 	}
@@ -85,7 +85,7 @@ func main() {
 
 	if len(flag.Args()) < 2 {
 		checkAllConfig(state, client)
-		doList(*state, cache, filters)
+		doList(*state, cache, client, filters)
 		os.Exit(0)
 	}
 
@@ -147,7 +147,7 @@ func main() {
 		doHelp()
 	case "list":
 		checkAllConfig(state, client)
-		doList(*state, cache, filters)
+		doList(*state, cache, client, filters)
 	default:
 		fmt.Printf("Unsupported command %v\n\n", command)
 		doHelp()

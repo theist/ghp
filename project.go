@@ -1,15 +1,18 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/google/go-github/v32/github"
-	"golang.org/x/oauth2"
 )
+
+type cacheUseOptions struct {
+	doNotStore   bool
+	ignoreCached bool
+}
 
 type card interface {
 	getURL() string
@@ -132,33 +135,11 @@ type column struct {
 	cards []card
 }
 
-func buildCard(p *ProjectProxy, c *github.ProjectCard) (card, error) {
-	url := c.GetURL()
-	noteText := c.GetNote()
-	if noteText != "" {
-		n := new(note)
-		n.text = noteText
-		n.url = url
-		n.createdAt = c.GetCreatedAt()
-		return n, nil // returns note
-	}
-	i, err := p.getIssueByURL(c.GetContentURL())
-	if err != nil {
-		return nil, err
-	}
-	i.url = url
-	i.createdAt = c.GetCreatedAt()
-	return i, nil // returns issue
-}
-
 func (c *column) pullCards(p *ProjectProxy) error {
 	// log.Printf("pullig cards for %v", c.id)
-	cards, res, err := p.client.Projects.ListProjectCards(*p.context, c.id, nil)
+	cards, err := p.client.getAllColumnCards(c.id)
 	if err != nil {
-		return fmt.Errorf("error Getting cards for %v: %v", c.id, err)
-	}
-	if res.StatusCode != 200 {
-		return fmt.Errorf("error Getting cards for %v: http: %v", c.id, res.Status)
+		return fmt.Errorf("%v", err)
 	}
 	for _, card := range cards {
 		if !card.GetArchived() {
@@ -175,44 +156,39 @@ func (c *column) pullCards(p *ProjectProxy) error {
 
 // ProjectProxy Class for interacting github's project
 type ProjectProxy struct {
-	client    *github.Client
-	context   *context.Context
-	authToken string
-	cache     *appCache
-	user      string
-	columns   []column
+	client  *ghpClient
+	cache   *appCache
+	columns []column
 }
 
-func (p *ProjectProxy) requestAPI(url string, v interface{}) error {
-	cached := p.cache.get(url)
-	if cached != nil {
-		reflect.ValueOf(v).Elem().Set(reflect.ValueOf(cached).Elem()) // v = x with interfaces
-		return nil
+func (p *ProjectProxy) requestAPI(url string, v interface{}, opts *cacheUseOptions) error {
+	if !opts.ignoreCached {
+		cached := p.cache.get(url)
+		if cached != nil {
+			reflect.ValueOf(v).Elem().Set(reflect.ValueOf(cached).Elem()) // v = x with interfaces
+			return nil
+		}
 	}
-	req, _ := p.client.NewRequest("GET", url, nil)
-	res, err := p.client.Do(*p.context, req, v)
+	err := p.client.getAPIObject(url, v)
 	if err != nil {
 		return err
 	}
-	if res.StatusCode != 200 {
-		return fmt.Errorf("error getting %v: %v", url, res.Status)
+	if !opts.doNotStore {
+		p.cache.add(url, v)
 	}
-	p.cache.add(url, v)
-	// TODO: process API response
 	return nil
 }
 
 func (p *ProjectProxy) getIssueByURL(url string) (*issue, error) {
 	i := new(github.Issue)
-	req, _ := p.client.NewRequest("GET", url, nil)
-	_, err := p.client.Do(*p.context, req, i)
+	err := p.requestAPI(url, i, &cacheUseOptions{true, true})
 	if err != nil {
 		return nil, err
 	}
 	pIssue := new(issue)
 	pIssue.ghIssue = i
 	repo := new(github.Repository)
-	err = p.requestAPI(i.GetRepositoryURL(), repo)
+	err = p.requestAPI(i.GetRepositoryURL(), repo, &cacheUseOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -222,12 +198,9 @@ func (p *ProjectProxy) getIssueByURL(url string) (*issue, error) {
 
 func (p *ProjectProxy) pullColums(projectID int64) error {
 	// log.Printf("Pull columns %v", projectID)
-	cols, res, err := p.client.Projects.ListProjectColumns(*p.context, projectID, nil)
+	cols, err := p.client.listColumns(projectID)
 	if err != nil {
-		return fmt.Errorf("error getting columns for %v: %v", projectID, err)
-	}
-	if res.StatusCode != 200 {
-		return fmt.Errorf("error getting columns for %v: http: %v", projectID, res.Status)
+		return fmt.Errorf("%v", err)
 	}
 	if len(cols) < 1 {
 		return fmt.Errorf("error getting columns for %v: Zero items", projectID)
@@ -247,17 +220,9 @@ func (p *ProjectProxy) pullColums(projectID int64) error {
 }
 
 // Project Proxy initializer
-func (p *ProjectProxy) init(state ghpConfig, cache *appCache, projectID int64) error {
+func (p *ProjectProxy) init(state ghpConfig, cache *appCache, client *ghpClient, projectID int64) error {
 	p.cache = cache
-	ctx := context.Background()
-	p.authToken = state.AccessToken
-	p.user = state.User
-	p.context = &ctx
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: p.authToken},
-	)
-	tc := oauth2.NewClient(*p.context, ts)
-	p.client = github.NewClient(tc)
+	p.client = client
 	return nil
 }
 
@@ -271,4 +236,24 @@ func (p *ProjectProxy) listProject(filter [][]string) {
 			}
 		}
 	}
+}
+
+// static methods
+func buildCard(p *ProjectProxy, c *github.ProjectCard) (card, error) {
+	url := c.GetURL()
+	noteText := c.GetNote()
+	if noteText != "" {
+		n := new(note)
+		n.text = noteText
+		n.url = url
+		n.createdAt = c.GetCreatedAt()
+		return n, nil // returns note
+	}
+	i, err := p.getIssueByURL(c.GetContentURL())
+	if err != nil {
+		return nil, err
+	}
+	i.url = url
+	i.createdAt = c.GetCreatedAt()
+	return i, nil // returns issue
 }
