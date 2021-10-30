@@ -25,6 +25,7 @@ type oauthAuthCodeResponse struct {
 
 type ghpClient struct {
 	oauthToken string
+	deviceCode string
 }
 
 func oauthCreateDeviceRequest() (*deviceOauthResponse, error) {
@@ -53,20 +54,17 @@ func oauthCreateDeviceRequest() (*deviceOauthResponse, error) {
 	return &responseJSON, nil
 }
 
-// TODO: Split two steps, bring User Interaction outside client class
-func (c *ghpClient) performOauth() error {
+func (c *ghpClient) prepareDeviceForOauth() (string, string, error) {
 	device, err := oauthCreateDeviceRequest()
 	if err != nil {
-		return fmt.Errorf("error creating device request: %v", err)
+		return "", "", fmt.Errorf("error creating device request: %v", err)
 	}
-	fmt.Println("A browser window will open")
-	fmt.Println("Please insert this code to authorize this client")
-	fmt.Println(device.UserCode)
-	openBrowser(device.VerificationURI)
-	fmt.Println("Press enter when done!")
-	fmt.Scanln() // wait for Enter Key
+	c.deviceCode = device.DeviceCode
+	return device.UserCode, device.VerificationURI, nil
+}
 
-	body := strings.NewReader(fmt.Sprintf("client_id=0412cc5fb93b10a59e50&device_code=%s&grant_type=urn:ietf:params:oauth:grant-type:device_code", device.DeviceCode))
+func (c *ghpClient) performOauth() error {
+	body := strings.NewReader(fmt.Sprintf("client_id=0412cc5fb93b10a59e50&device_code=%s&grant_type=urn:ietf:params:oauth:grant-type:device_code", c.deviceCode))
 
 	req, err := http.NewRequest("POST", "https://github.com/login/oauth/access_token", body)
 	if err != nil {

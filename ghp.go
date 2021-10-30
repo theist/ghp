@@ -99,7 +99,18 @@ func main() {
 				os.Exit(0)
 			}
 		}
-		err := client.performOauth()
+		userCode, oauthURI, err := client.prepareDeviceForOauth()
+		if err != nil {
+			fmt.Printf("Error Performing oauth: %v", err)
+			os.Exit(1)
+		}
+		fmt.Println("A browser window will open")
+		fmt.Println("Please insert this code to authorize this client")
+		fmt.Println(userCode)
+		openBrowser(oauthURI)
+		fmt.Println("Press enter when done!")
+		fmt.Scanln() // wait for Enter Key
+		err = client.performOauth()
 		if err != nil {
 			fmt.Printf("Error Performing oauth: %v", err)
 			os.Exit(1)
