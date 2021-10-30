@@ -34,6 +34,21 @@ func doHelp() {
 	log.Fatal("Unimplemented")
 }
 
+func checkAllConfig(config *ghpConfig, client *ghpClient) {
+	valid, err := client.validToken()
+	if err != nil {
+		fmt.Printf("There was a problem with the current stored token: %v", err)
+	}
+	if !valid {
+		fmt.Println("ghp is not configured yet, run 'ghp auth' and 'ghp config'")
+		os.Exit(1)
+	}
+	if config.DefaultProjectID == 0 {
+		fmt.Println("You don't have configured ghp yet, run 'ghp config'")
+		os.Exit(1)
+	}
+}
+
 func doList(state ghpConfig, cache *appCache, f filterFlags) {
 	fmt.Printf("Requesting full project %v, this can take some time\n", state.DefaultProject)
 	p := new(ProjectProxy)
@@ -68,18 +83,7 @@ func main() {
 	flag.Parse()
 
 	if len(flag.Args()) < 2 {
-		valid, err := client.validToken()
-		if err != nil {
-			fmt.Printf("There was a problem with the current stored token: %v", err)
-		}
-		if !valid {
-			fmt.Println("ghp is not configured yet, run 'ghp auth' and 'ghp config'")
-			os.Exit(1)
-		}
-		if state.DefaultProjectID == 0 {
-			fmt.Println("You don't have configured ghp yet, run 'ghp config'")
-			os.Exit(1)
-		}
+		checkAllConfig(state, client)
 		doList(*state, cache, filters)
 		os.Exit(0)
 	}
@@ -130,11 +134,7 @@ func main() {
 	case "help":
 		doHelp()
 	case "list":
-		valid, _ := client.validToken()
-		if !valid {
-			fmt.Printf("There's no valid oauth token, please run 'ghp auth'")
-			os.Exit(1)
-		}
+		checkAllConfig(state, client)
 		doList(*state, cache, filters)
 	default:
 		fmt.Printf("Unsupported command %v\n\n", command)
