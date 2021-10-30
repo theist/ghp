@@ -1,29 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 )
-
-type deviceOauthResponse struct {
-	DeviceCode      string `json:"device_code"`
-	UserCode        string `json:"user_code"`
-	VerificationURI string `json:"verification_uri"`
-	ExpiresIn       int    `json:"expires_in"`
-	Interval        int    `json:"interval"`
-}
-
-type oauthAuthCodeResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	Scope       string `json:"scope"`
-}
 
 type filterFlags []string
 
@@ -46,120 +29,31 @@ func (f *filterFlags) toFilters() [][]string {
 	return filters
 }
 
-func oauthCreateDeviceRequest() (*deviceOauthResponse, error) {
-	body := strings.NewReader(`client_id=0412cc5fb93b10a59e50&scope=repo`)
-	req, err := http.NewRequest("POST", "https://github.com/login/device/code", body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	responseBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	var responseJSON deviceOauthResponse
-	err = json.Unmarshal(responseBody, &responseJSON)
-	if err != nil {
-		return nil, err
-	}
-	return &responseJSON, nil
-}
-
-func getOauthToken(device *deviceOauthResponse) (*string, error) {
-	fmt.Println("A browser window will open")
-	fmt.Println("Please insert this code to authorize this client")
-	fmt.Println(device.UserCode)
-	openBrowser(device.VerificationURI)
-	fmt.Println("Press enter when done!")
-	fmt.Scanln() // wait for Enter Key
-
-	body := strings.NewReader(fmt.Sprintf("client_id=0412cc5fb93b10a59e50&device_code=%s&grant_type=urn:ietf:params:oauth:grant-type:device_code", device.DeviceCode))
-
-	req, err := http.NewRequest("POST", "https://github.com/login/oauth/access_token", body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	responseBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	var responseAuth oauthAuthCodeResponse
-	err = json.Unmarshal(responseBody, &responseAuth)
-	if err != nil {
-		return nil, err
-	}
-	res := responseAuth.AccessToken
-	return &res, nil
-}
-
-func validToken(token string) bool {
-	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
-	if token == "" {
-		log.Print("Empty token")
-		return false
-	}
-	if err != nil {
-		log.Println("Error Creating request", err)
-		return false
-	}
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("Authorization", "token "+token)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Println("Error Sending request", err)
-		return false
-	}
-	defer resp.Body.Close()
-	_, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Println("Error Reading body", err)
-		return false
-	}
-	if resp.StatusCode != 200 {
-		log.Printf("Client error: %v", resp.StatusCode)
-		return false
-	}
-	return true
-}
-
-func getOAuthToken() string {
-	res, err := oauthCreateDeviceRequest()
-	if err != nil {
-		log.Fatal("Error creating device request: ", err)
-	}
-
-	token, err := getOauthToken(res)
-	if err != nil {
-		log.Fatal("Error getting oauth token: ", err)
-	}
-	return *token
-}
-
 // TODO: Show help
 func doHelp() {
 	log.Fatal("Unimplemented")
 }
 
-func doList(state ghpConfig, cache *appCache, f filterFlags) {
+// Checks config or exit with error and help text.
+func checkAllConfig(config *ghpConfig, client *ghpClient) {
+	valid, err := client.validToken()
+	if err != nil {
+		fmt.Printf("There was a problem with the current stored token: %v", err)
+	}
+	if !valid {
+		fmt.Println("ghp is not configured yet, run 'ghp auth' and 'ghp config'")
+		os.Exit(1)
+	}
+	if config.DefaultProjectID == 0 {
+		fmt.Println("You don't have configured ghp yet, run 'ghp config'")
+		os.Exit(1)
+	}
+}
+
+func doList(state ghpConfig, cache *appCache, client *ghpClient, f filterFlags) {
 	fmt.Printf("Requesting full project %v, this can take some time\n", state.DefaultProject)
 	p := new(ProjectProxy)
-	err := p.init(state, cache, state.DefaultProjectID)
+	err := p.init(state, cache, client, state.DefaultProjectID)
 	if err != nil {
 		fmt.Printf("Error creating client %v", err)
 	}
@@ -182,6 +76,7 @@ func main() {
 		fmt.Printf("Empty state: %v\n", err)
 	}
 	cache := initCache()
+	client := createClient(state.AccessToken)
 
 	// parse flags
 	var filters filterFlags
@@ -189,15 +84,8 @@ func main() {
 	flag.Parse()
 
 	if len(flag.Args()) < 2 {
-		if !validToken(state.AccessToken) {
-			fmt.Println("You don't have configured ghp yet, run 'ghp auth' and 'ghp config'")
-			os.Exit(1)
-		}
-		if state.DefaultProjectID == 0 {
-			fmt.Println("You don't have configured ghp yet, run 'ghp config'")
-			os.Exit(1)
-		}
-		doList(*state, cache, filters)
+		checkAllConfig(state, client)
+		doList(*state, cache, client, filters)
 		os.Exit(0)
 	}
 
@@ -205,13 +93,35 @@ func main() {
 
 	switch command {
 	case "auth":
-		if validToken(state.AccessToken) {
+		valid, _ := client.validToken()
+		if valid {
 			if !askForConfirmation("There's already valid token are you sure") {
 				os.Exit(0)
 			}
 		}
-		state.AccessToken = getOAuthToken()
-		if validToken(state.AccessToken) {
+		userCode, oauthURI, err := client.prepareDeviceForOauth()
+		if err != nil {
+			fmt.Printf("Error Performing oauth: %v", err)
+			os.Exit(1)
+		}
+		fmt.Println("A browser window will open")
+		fmt.Println("Please insert this code to authorize this client")
+		fmt.Println(userCode)
+		openBrowser(oauthURI)
+		fmt.Println("Press enter when done!")
+		fmt.Scanln() // wait for Enter Key
+		err = client.performOauth()
+		if err != nil {
+			fmt.Printf("Error Performing oauth: %v", err)
+			os.Exit(1)
+		}
+		state.AccessToken = client.getToken()
+		valid, err = client.validToken()
+		if err != nil {
+			fmt.Printf("Error whith token: %v", err)
+			os.Exit(1)
+		}
+		if valid {
 			err := state.save()
 			if err != nil {
 				fmt.Printf("Error saving config: %v", err)
@@ -220,7 +130,8 @@ func main() {
 			fmt.Printf("Auth changes will clear options, please run 'ghp config'\n")
 		}
 	case "config":
-		if !validToken(state.AccessToken) {
+		valid, _ := client.validToken()
+		if !valid {
 			fmt.Printf("There's no valid oauth token, please run 'ghp auth'")
 		}
 		err = renewConfig(state)
@@ -228,16 +139,15 @@ func main() {
 			fmt.Printf("%v", err)
 			os.Exit(0)
 		}
-		if validToken(state.AccessToken) {
-			err := state.save()
-			if err != nil {
-				fmt.Printf("Error saving state: %v", err)
-			}
+		err := state.save()
+		if err != nil {
+			fmt.Printf("Error saving state: %v", err)
 		}
 	case "help":
 		doHelp()
 	case "list":
-		doList(*state, cache, filters)
+		checkAllConfig(state, client)
+		doList(*state, cache, client, filters)
 	default:
 		fmt.Printf("Unsupported command %v\n\n", command)
 		doHelp()
