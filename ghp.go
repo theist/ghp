@@ -34,6 +34,7 @@ func doHelp() {
 	log.Fatal("Unimplemented")
 }
 
+// Checks config or exit with error and help text.
 func checkAllConfig(config *ghpConfig, client *ghpClient) {
 	valid, err := client.validToken()
 	if err != nil {
