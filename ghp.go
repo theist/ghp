@@ -98,7 +98,7 @@ func main() {
 				os.Exit(0)
 			}
 		}
-		err := client.getOauthToken()
+		err := client.performOauth()
 		if err != nil {
 			fmt.Printf("Error Performing oauth: %v", err)
 			os.Exit(1)

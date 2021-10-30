@@ -54,7 +54,7 @@ func oauthCreateDeviceRequest() (*deviceOauthResponse, error) {
 }
 
 // TODO: Split two steps, bring User Interaction outside client class
-func (c *ghpClient) getOauthToken() error {
+func (c *ghpClient) performOauth() error {
 	device, err := oauthCreateDeviceRequest()
 	if err != nil {
 		return fmt.Errorf("error creating device request: %v", err)
