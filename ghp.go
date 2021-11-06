@@ -77,6 +77,7 @@ func main() {
 	}
 	cache := initCache()
 	client := createClient(state.AccessToken)
+	singleColorHub.init()
 
 	// parse flags
 	var filters filterFlags

@@ -90,6 +90,18 @@ func (i *issue) labelString() string {
 	return res
 }
 
+func (i *issue) labelNames() []string {
+	labels := i.ghIssue.Labels
+	if len(labels) == 0 {
+		return make([]string, 0, 0)
+	}
+	labelnames := make([]string, 0, len(labels))
+	for _, label := range labels {
+		labelnames = append(labelnames, label.GetName())
+	}
+	return labelnames
+}
+
 func (i *issue) lenLabelString() int {
 	return utf8.RuneCountInString(i.labelString())
 }

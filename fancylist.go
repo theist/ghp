@@ -54,12 +54,17 @@ func fancyIssueStr(i *issue, idField, asigneeField, maxSize int) string {
 	} else {
 		ellipsedTitle = ellipseStr(i.ghIssue.GetTitle(), remain-i.lenLabelString()-1)
 	}
-	str = "  " + i.repository.GetName() + "#" + strconv.Itoa(i.ghIssue.GetNumber()) + idSp + ellipsedTitle + flexSp
+	str = "  " + singleColorHub.stableColorize(i.repository.GetName()) + "#" + strconv.Itoa(i.ghIssue.GetNumber()) + idSp + ellipsedTitle + flexSp
 	if !omitLabels {
-		str = str + " " + i.labelString()
+		labels := i.labelNames()
+		coloredLabels := make([]string, 0, len(labels))
+		for _, label := range labels {
+			coloredLabels = append(coloredLabels, singleColorHub.stableColorize(label))
+		}
+		str = str + " " + strings.Join(coloredLabels, ",")
 	}
 	if i.ghIssue.GetAssignee().GetLogin() != "" {
-		str = str + " " + asigneeSp + "@" + i.ghIssue.GetAssignee().GetLogin()
+		str = str + " " + asigneeSp + singleColorHub.stableColorize("@"+i.ghIssue.GetAssignee().GetLogin())
 	}
 	return str
 }
